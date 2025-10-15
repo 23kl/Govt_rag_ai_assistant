@@ -1,0 +1,19 @@
+# Core dependencies
+streamlit>=1.28.0
+chromadb>=0.4.15
+sentence-transformers>=2.2.2
+ollama>=0.1.0
+
+# Document processing
+PyPDF2>=3.0.0
+python-docx>=1.1.0
+Pillow>=10.0.0
+
+# Audio processing (optional but recommended)
+openai-whisper>=20231117
+ffmpeg-python>=0.2.0
+
+# Additional utilities
+numpy>=1.24.0
+pandas>=2.0.0
+torch>=2.0.0
