@@ -14,10 +14,13 @@ from PIL import Image
 import PyPDF2
 import docx
 import random
+import requests
+
 # ========== MODEL CONFIGURATION ==========
 OLLAMA_CHAT_MODEL = "deepseek-r1:1.5b"
 OLLAMA_VISION_MODEL = "llama3.2-vision"
 WHISPER_MODEL_SIZE = "base"
+OLLAMA_URL = "https://unrent-tess-histoid.ngrok-free.dev"
 # =========================================
 
 # ========== PRE-LOAD CONFIGURATION ==========
@@ -354,21 +357,6 @@ class MultimodalRAG:
                 })
         return formatted
     
-    import requests
-from typing import Dict, List, Tuple
-
-OLLAMA_URL = "https://unrent-tess-histoid.ngrok-free.dev"  # your current ngrok URL
-OLLAMA_CHAT_MODEL = "llama2"  # or whichever model you’re using
-
-
-def remove_think_tags(text: str) -> str:
-    """Helper to remove <think>...</think> tags if present"""
-    import re
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-
-
-class Retriever:
-
     def query(self, question: str, n: int = 5, search_mode: str = "text") -> Tuple[str, List[Dict]]:
         """
         Enhanced query with citation transparency.
@@ -419,7 +407,7 @@ QUESTION: {question}
 
 ANSWER:"""
 
-        # ✅ Call Ollama through ngrok tunnel using requests
+        # Call Ollama through ngrok tunnel using requests
         try:
             response = requests.post(
                 f"{OLLAMA_URL}/api/generate",
@@ -454,7 +442,6 @@ ANSWER:"""
                     stats[doc_type] += 1
 
         return stats
-
     
     def get_document_details(self, doc_id: str) -> Optional[Dict]:
         """Get full details of a specific document"""
@@ -771,292 +758,3 @@ def sidebar():
                         st.rerun()
         
         st.markdown("---")
-        
-        # Document browser
-        if st.button("📚 Browse All Documents"):
-            st.session_state.show_docs = not st.session_state.get('show_docs', False)
-        
-        if st.session_state.get('show_docs', False):
-            docs = st.session_state.rag.list_all_documents()
-            for doc in docs[:5]:  # Show first 5
-                with st.expander(f"📄 {doc['filename']}", expanded=False):
-                    st.caption(f"Type: {doc['type'].upper()}")
-                    st.caption(f"ID: {doc['id']}")
-                    st.text(doc['preview'])
-        
-        st.markdown("---")
-        
-        # Management
-        st.subheader("⚙️ Management")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("📚 Demo Data"):
-                with st.spinner("Adding demo data..."):
-                    st.session_state.rag.add_text(
-                        "International Development Report 2024: This report discusses global development initiatives and their impact on emerging economies.",
-                        {'source': 'demo', 'filename': 'dev_report_2024.txt'}
-                    )
-                    st.session_state.rag.add_text(
-                        "Email screenshot captured at 14:32 showing project approval from the director.",
-                        {'source': 'demo', 'filename': 'email_14_32.txt'}
-                    )
-                    st.success("✅ Demo data added!")
-                    st.rerun()
-        
-        with col2:
-            if st.button("🗑️ Clear All"):
-                if st.session_state.rag.get_stats()['total'] > 0:
-                    st.session_state.rag.delete_all()
-                    st.session_state.chat_history = []
-                    st.success("✅ Database cleared!")
-                    st.rerun()
-
-
-def render_citation_card(source, index):
-    content = source.get("content", "")
-    random_suffix = random.randint(100000, 999999)
-    st.text_area(
-        label=f"Citation {index + 1}",
-        value=content,
-        height=150,
-        key=f"citation_{index}_{random_suffix}",
-        disabled=True
-    )
-        
-def main_interface():
-    """Enhanced main interface with all search modes"""
-    st.title("💬 Unified Query Interface")
-    st.caption("Ask questions in natural language or upload files to search")
-    
-    # Check if database has documents
-    stats = st.session_state.rag.get_stats()
-    if stats['total'] == 0:
-        st.info("👈 **Get Started:** Upload documents using the sidebar")
-        st.info(f"💡 **Quick Start:** Place documents in `{PRELOAD_TEXT_DIR}`, `{PRELOAD_IMAGE_DIR}`, or `{PRELOAD_AUDIO_DIR}` folders and restart")
-        
-        # Show example queries
-        with st.expander("📝 Example Queries"):
-            st.markdown("""
-            - "Show me the report about international development in 2024"
-            - "Find the email screenshot taken at 14:32"
-            - "What documents discuss project approval?"
-            - Upload an image to find related documents
-            - Upload audio to find matching transcripts
-            """)
-        return
-    
-    # Search mode selector
-    st.markdown("### 🔍 Search Mode")
-    search_cols = st.columns([1, 1, 1, 2])
-    
-    with search_cols[0]:
-        text_mode = st.button("💬 Text Query", use_container_width=True, 
-                             type="primary" if st.session_state.search_mode == 'text' else "secondary")
-        if text_mode:
-            st.session_state.search_mode = 'text'
-    
-    with search_cols[1]:
-        image_mode = st.button("🖼️ Image Search", use_container_width=True,
-                              type="primary" if st.session_state.search_mode == 'image' else "secondary")
-        if image_mode:
-            st.session_state.search_mode = 'image'
-    
-    with search_cols[2]:
-        audio_mode = st.button("🎵 Audio Search", use_container_width=True,
-                              type="primary" if st.session_state.search_mode == 'audio' else "secondary")
-        if audio_mode:
-            st.session_state.search_mode = 'audio'
-    
-    st.markdown("---")
-    
-    # Display mode-specific interface
-    if st.session_state.search_mode == 'text':
-        render_text_search()
-    elif st.session_state.search_mode == 'image':
-        render_image_search()
-    elif st.session_state.search_mode == 'audio':
-        render_audio_search()
-
-
-def render_text_search():
-    """Text-to-multimodal search interface"""
-    st.markdown("### 💬 Natural Language Query")
-    st.caption("Ask questions about your documents in plain language")
-    
-    # Display chat history
-    for i, message in enumerate(st.session_state.chat_history):
-        if message['role'] == 'user':
-            with st.chat_message("user"):
-                st.write(message['content'])
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(message['content'])
-                
-                # Show citations
-                if 'sources' in message and message['sources']:
-                    st.markdown("---")
-                    st.markdown("#### 📚 Sources & Citations")
-                    for j, source in enumerate(message['sources'], 1):
-                        render_citation_card(source, j)
-    
-    # Chat input
-    user_query = st.chat_input("Ask a question about your documents...")
-    
-    if user_query:
-        # Add user message
-        st.session_state.chat_history.append({
-            'role': 'user',
-            'content': user_query
-        })
-        
-        # Display user message
-        with st.chat_message("user"):
-            st.write(user_query)
-        
-        # Get response
-        with st.chat_message("assistant"):
-            with st.spinner("🔍 Searching and analyzing..."):
-                response, sources = st.session_state.rag.query(user_query, n=5)
-                st.markdown(response)
-                
-                # Display citations
-                if sources:
-                    st.markdown("---")
-                    st.markdown("#### 📚 Sources & Citations")
-                    for i, source in enumerate(sources, 1):
-                        render_citation_card(source, i)
-        
-        # Add assistant message
-        st.session_state.chat_history.append({
-            'role': 'assistant',
-            'content': response,
-            'sources': sources
-        })
-        
-        st.rerun()
-    
-    # Clear chat button
-    if st.session_state.chat_history:
-        if st.button("🗑️ Clear Chat History", key="clear_chat"):
-            st.session_state.chat_history = []
-            st.rerun()
-
-
-def render_image_search():
-    """Image-to-multimodal search interface"""
-    st.markdown("### 🖼️ Image-Based Search")
-    st.caption("Upload an image to find related documents, text, and audio")
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        search_image = st.file_uploader(
-            "Upload image to search",
-            type=['jpg', 'jpeg', 'png', 'gif', 'bmp'],
-            key='search_image_uploader'
-        )
-        
-        if search_image:
-            st.image(search_image, caption="Query Image", use_container_width=True)
-            
-            if st.button("🔍 Search with this Image", type="primary", key="search_img_btn"):
-                # Save temporarily
-                temp_path = Path("data/temp_search.jpg")
-                with open(temp_path, "wb") as f:
-                    f.write(search_image.getbuffer())
-                
-                with st.spinner("🔍 Analyzing image and searching..."):
-                    results = st.session_state.rag.search_by_image(str(temp_path), n=5)
-                    st.session_state.image_search_results = results
-                    st.rerun()
-    
-    with col2:
-        if 'image_search_results' in st.session_state and st.session_state.image_search_results:
-            st.markdown("#### 📊 Search Results")
-            st.success(f"Found {len(st.session_state.image_search_results)} relevant documents")
-            
-            for i, result in enumerate(st.session_state.image_search_results, 1):
-                render_citation_card(result, i)
-        else:
-            st.info("👆 Upload an image above to start searching")
-
-
-def render_audio_search():
-    """Audio-to-multimodal search interface"""
-    st.markdown("### 🎵 Audio-Based Search")
-    st.caption("Upload audio to find related documents and transcripts")
-    
-    if not WHISPER_AVAILABLE:
-        st.error("⚠️ Whisper not installed. Please install: `pip install openai-whisper`")
-        return
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        search_audio = st.file_uploader(
-            "Upload audio to search",
-            type=['mp3', 'wav', 'm4a', 'flac'],
-            key='search_audio_uploader'
-        )
-        
-        if search_audio:
-            st.audio(search_audio)
-            
-            if st.button("🔍 Search with this Audio", type="primary", key="search_audio_btn"):
-                # Save temporarily
-                temp_path = Path("data/temp_search_audio.mp3")
-                with open(temp_path, "wb") as f:
-                    f.write(search_audio.getbuffer())
-                
-                with st.spinner("🎤 Transcribing and searching..."):
-                    results = st.session_state.rag.search_by_audio(str(temp_path), n=5)
-                    st.session_state.audio_search_results = results
-                    st.rerun()
-    
-    with col2:
-        if 'audio_search_results' in st.session_state and st.session_state.audio_search_results:
-            st.markdown("#### 📊 Search Results")
-            st.success(f"Found {len(st.session_state.audio_search_results)} relevant documents")
-            
-            for i, result in enumerate(st.session_state.audio_search_results, 1):
-                render_citation_card(result, i)
-        else:
-            st.info("👆 Upload audio above to start searching")
-
-
-def render_full_document_viewer():
-    """Render full document viewer if a document is selected"""
-    if 'selected_doc' in st.session_state:
-        with st.expander("📄 Full Document View", expanded=True):
-            doc = st.session_state.selected_doc
-            
-            st.markdown(f"**Document ID:** `{doc['id']}`")
-            st.markdown(f"**Type:** {doc['metadata']['type'].upper()}")
-            st.markdown(f"**Filename:** {doc['metadata'].get('filename', 'Unknown')}")
-            
-            st.markdown("---")
-            st.markdown("**Full Content:**")
-            st.text_area("", doc['content'], height=400, disabled=True, key="full_doc_view")
-            
-            if st.button("✖️ Close"):
-                del st.session_state.selected_doc
-                st.rerun()
-
-
-def main():
-    """Main application"""
-    setup_page()
-    init_session_state()
-    sidebar()
-    main_interface()
-    render_full_document_viewer()
-    
-    # Footer
-    st.markdown("---")
-    st.caption("🔍 Multimodal RAG System | Smart Intelligence Centre | SIH 2024")
-    st.caption("💡 Supports: PDF, DOCX, TXT, Images (JPG, PNG), Audio (MP3, WAV, M4A)")
-
-
-if __name__ == "__main__":
-    main()
