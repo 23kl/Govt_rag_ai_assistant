@@ -14,10 +14,13 @@ from PIL import Image
 import PyPDF2
 import docx
 import random
+import requests
+
 # ========== MODEL CONFIGURATION ==========
 OLLAMA_CHAT_MODEL = "deepseek-r1:1.5b"
 OLLAMA_VISION_MODEL = "llama3.2-vision"
 WHISPER_MODEL_SIZE = "base"
+OLLAMA_URL = "https://unrent-tess-histoid.ngrok-free.dev"
 # =========================================
 
 # ========== PRE-LOAD CONFIGURATION ==========
@@ -354,21 +357,6 @@ class MultimodalRAG:
                 })
         return formatted
     
-    import requests
-from typing import Dict, List, Tuple
-
-OLLAMA_URL = "https://unrent-tess-histoid.ngrok-free.dev"  # your current ngrok URL
-OLLAMA_CHAT_MODEL = "llama2"  # or whichever model you’re using
-
-
-def remove_think_tags(text: str) -> str:
-    """Helper to remove <think>...</think> tags if present"""
-    import re
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-
-
-class Retriever:
-
     def query(self, question: str, n: int = 5, search_mode: str = "text") -> Tuple[str, List[Dict]]:
         """
         Enhanced query with citation transparency.
@@ -419,7 +407,7 @@ QUESTION: {question}
 
 ANSWER:"""
 
-        # ✅ Call Ollama through ngrok tunnel using requests
+        # Call Ollama through ngrok tunnel using requests
         try:
             response = requests.post(
                 f"{OLLAMA_URL}/api/generate",
@@ -454,7 +442,6 @@ ANSWER:"""
                     stats[doc_type] += 1
 
         return stats
-
     
     def get_document_details(self, doc_id: str) -> Optional[Dict]:
         """Get full details of a specific document"""
@@ -771,8 +758,7 @@ def sidebar():
                         st.rerun()
         
         st.markdown("---")
-        
-        # Document browser
+# Document browser
         if st.button("📚 Browse All Documents"):
             st.session_state.show_docs = not st.session_state.get('show_docs', False)
         
