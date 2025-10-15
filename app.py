@@ -354,9 +354,24 @@ class MultimodalRAG:
                 })
         return formatted
     
+    import requests
+from typing import Dict, List, Tuple
+
+OLLAMA_URL = "https://unrent-tess-histoid.ngrok-free.dev"  # your current ngrok URL
+OLLAMA_CHAT_MODEL = "llama2"  # or whichever model you’re using
+
+
+def remove_think_tags(text: str) -> str:
+    """Helper to remove <think>...</think> tags if present"""
+    import re
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+
+class Retriever:
+
     def query(self, question: str, n: int = 5, search_mode: str = "text") -> Tuple[str, List[Dict]]:
         """
-        Enhanced query with citation transparency
+        Enhanced query with citation transparency.
         search_mode: 'text', 'image', or 'audio'
         """
         # Perform search based on mode
@@ -364,36 +379,38 @@ class MultimodalRAG:
             results = self.search_by_text(question, n)
         else:
             results = []
-        
+
         if not results:
             return "No relevant documents found in the database. Please add documents first.", []
-        
+
         # Build context with numbered citations
         context_parts = []
         for i, r in enumerate(results, 1):
             doc_type = r['metadata']['type'].upper()
             filename = r['metadata'].get('filename', 'Unknown')
-            
+
             citation = f"[Citation {i}: {doc_type} - {filename}]"
-            
+
             # Add specific location info if available
             if 'total_pages' in r['metadata']:
                 citation += f" (Pages: {r['metadata']['total_pages']})"
             elif 'has_timestamps' in r['metadata'] and r['metadata']['has_timestamps']:
                 citation += " (Timestamped audio)"
-            
+
             context_parts.append(f"{citation}\n{r['content'][:500]}...")
-        
+
         context = "\n\n".join(context_parts)
-        
-        prompt = f"""You are a helpful assistant for a document retrieval system. Answer the question using the provided sources.
+
+        # Construct prompt for Ollama
+        prompt = f"""You are a helpful assistant for a document retrieval system. 
+Answer the question using the provided sources.
 
 IMPORTANT INSTRUCTIONS:
-1. Use numbered citations [1], [2], etc. when referencing information from sources
-2. Be specific about which source you're using
-3. If information comes from multiple sources, cite all relevant ones
-4. Keep your answer clear and concise
-5. If the sources don't contain enough information, say so
+1. Use numbered citations [1], [2], etc. when referencing information from sources.
+2. Be specific about which source you're using.
+3. If information comes from multiple sources, cite all relevant ones.
+4. Keep your answer clear and concise.
+5. If the sources don't contain enough information, say so.
 
 SOURCES:
 {context}
@@ -401,19 +418,26 @@ SOURCES:
 QUESTION: {question}
 
 ANSWER:"""
-        
-        response = ollama.chat(
-            model=OLLAMA_CHAT_MODEL,
-            messages=[{'role': 'user', 'content': prompt}]
-        )
-        
-        content = response['message']['content']
+
+        # ✅ Call Ollama through ngrok tunnel using requests
+        try:
+            response = requests.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={"model": OLLAMA_CHAT_MODEL, "prompt": prompt},
+                timeout=120
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data.get("response", "") or data.get("message", {}).get("content", "")
+        except Exception as e:
+            content = f"Error connecting to Ollama: {e}"
+
         return remove_think_tags(content), results
-    
+
     def get_stats(self) -> Dict:
         """Get detailed database statistics"""
         all_docs = self.collection.get()
-        
+
         stats = {
             'total': self.collection.count(),
             'text': 0,
@@ -422,14 +446,15 @@ ANSWER:"""
             'pdf': 0,
             'docx': 0
         }
-        
+
         if all_docs['metadatas']:
             for meta in all_docs['metadatas']:
                 doc_type = meta.get('type', 'unknown')
                 if doc_type in stats:
                     stats[doc_type] += 1
-        
+
         return stats
+
     
     def get_document_details(self, doc_id: str) -> Optional[Dict]:
         """Get full details of a specific document"""
